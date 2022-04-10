@@ -30,25 +30,37 @@ contract Burse {
 
     Mode public mode;
 
-    constructor(uint256 _tokenPrice, uint256 _tradingVolume) {
-        tokenPrice = _tokenPrice;
-        tradingVolume = _tradingVolume;
-        idOrder = 1;
+    constructor(
+        uint256 _primaryTokenPrice,
+        uint256 _primaryTradingVolume,
+        uint256 _roundDuration
+    ) {
+        tokenPrice = _primaryTokenPrice;
+        tradingVolume = _primaryTradingVolume;
+        roundDuration = _roundDuration;
+        timestampStartRound = block.timestamp + _roundDuration;
+        idOrder = 0;
+        mode = Mode.Trade;
     }
 
     function register(address _referrer) public {
         require(referrers[msg.sender] != address(0), "You are registered yet");
-        require(_referrer != msg.sender, "You are registered yet");
+        require(
+            _referrer != msg.sender,
+            "You cannot refer yourself as a referral"
+        );
         referrers[msg.sender] = _referrer;
     }
 
     function startSaleRound() public {
-        // старт раунда sale
         require(
             mode == Mode.Trade,
             "The Sale mode can be set only after the end of the Trade mode"
         );
-        require(block.timestamp < timestampStartRound + roundDuration);
+        require(
+            block.timestamp > timestampStartRound + roundDuration,
+            "Round trade while lasts"
+        );
         timestampStartRound = block.timestamp;
         mode = Mode.Sale;
         if (tradingVolume != 0) {
@@ -63,7 +75,7 @@ contract Burse {
             "The Trade mode can be set only after the end of the Sale mode"
         );
         require(
-            block.timestamp < roundDuration + timestampStartRound,
+            block.timestamp > roundDuration + timestampStartRound,
             "Round sale while lasts"
         );
         timestampStartRound = block.timestamp;
@@ -84,6 +96,10 @@ contract Burse {
             "Round Sale Finished"
         );
         require(msg.value > 0, "You sent 0 ETH");
+        require(
+            msg.value / tokenPrice <= Token(tokenACDM).balanceOf(address(this)),
+            "You want to buy more tokens than we have"
+        );
         if (referrers[msg.sender] != address(0)) {
             payable(referrers[msg.sender]).transfer((msg.value * 3) / 100);
             if (
@@ -96,8 +112,8 @@ contract Burse {
             }
         }
         IERC20(tokenACDM).safeTransferFrom(
-            msg.sender,
             address(this),
+            msg.sender,
             msg.value / tokenPrice
         );
     }
@@ -107,8 +123,8 @@ contract Burse {
         returns (uint256)
     {
         IERC20(tokenACDM).safeTransferFrom(msg.sender, address(this), _amount);
-        orders[idOrder] = Order(msg.sender, _amount, _price);
         idOrder += 1;
+        orders[idOrder] = Order(msg.sender, _amount, _price);
         return idOrder;
     }
 
@@ -136,7 +152,7 @@ contract Burse {
             );
             if (
                 referrers[referrers[orders[_id].seller]] != address(0) &&
-                referrers[referrers[orders[_id].seller]] != msg.sender
+                referrers[referrers[orders[_id].seller]] != orders[_id].seller
             ) {
                 payable(referrers[referrers[orders[_id].seller]]).transfer(
                     (msg.value * 25) / 1000
