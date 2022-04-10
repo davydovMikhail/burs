@@ -5,7 +5,7 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract Token is ERC20, Ownable {
-    address private _bridge;
+    address private _burse;
 
     constructor(
         uint256 _supply,
@@ -15,20 +15,20 @@ contract Token is ERC20, Ownable {
         _mint(msg.sender, _supply);
     }
 
-    modifier onlyBridge() {
-        require(msg.sender == _bridge, "Access is denied");
+    modifier onlyBurse() {
+        require(msg.sender == _burse, "Access is denied");
         _;
     }
 
-    function setBridgeAddress(address _token) external onlyOwner {
-        _bridge = _token;
+    function setBurseAddress(address _token) external onlyOwner {
+        _burse = _token;
     }
 
-    function mint(address _to, uint256 _amount) public onlyBridge {
+    function mint(address _to, uint256 _amount) public onlyBurse {
         _mint(_to, _amount);
     }
 
-    function burn(address _from, uint256 _amount) public onlyBridge {
+    function burn(address _from, uint256 _amount) public onlyBurse {
         _burn(_from, _amount);
     }
 }
