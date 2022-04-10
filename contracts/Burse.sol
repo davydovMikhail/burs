@@ -4,18 +4,19 @@ pragma solidity ^0.8.4;
 import "hardhat/console.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "./Token.sol";
 
-contract Burse {
+contract Burse is ReentrancyGuard {
     using SafeERC20 for IERC20;
-    mapping(uint256 => Order) private orders; // все ордера
+    mapping(uint256 => Order) public orders; // все ордера
     mapping(address => address) private referrers; // участники реферальной программы
     address tokenACDM; // адрес токена
-    uint256 private tokenPrice; // цена одного токена в ETH
+    uint256 public tokenPrice; // цена одного токена в ETH
     uint256 private roundDuration; // продолжительность раунда(секунды)
     uint256 private timestampStartRound; // метка времни начала раунда (любого)
     uint256 private idOrder; // идентификатор раунда
-    uint256 private tradingVolume; // объем (ETH) торгов в режиме Trade ()
+    uint256 public tradingVolume; // объем (ETH) торгов в режиме Trade ()
 
     struct Order {
         address seller;
@@ -33,22 +34,25 @@ contract Burse {
     constructor(
         uint256 _primaryTokenPrice,
         uint256 _primaryTradingVolume,
-        uint256 _roundDuration
+        uint256 _roundDuration,
+        address _tokenACDM
     ) {
         tokenPrice = _primaryTokenPrice;
         tradingVolume = _primaryTradingVolume;
         roundDuration = _roundDuration;
-        timestampStartRound = block.timestamp + _roundDuration;
+        tokenACDM = _tokenACDM;
+        timestampStartRound = block.timestamp - _roundDuration;
         idOrder = 0;
         mode = Mode.Trade;
     }
 
     function register(address _referrer) public {
-        require(referrers[msg.sender] != address(0), "You are registered yet");
+        require(referrers[msg.sender] == address(0), "You are registered yet");
         require(
             _referrer != msg.sender,
             "You cannot refer yourself as a referral"
         );
+        require(_referrer != address(0), "You entered null address");
         referrers[msg.sender] = _referrer;
     }
 
@@ -65,7 +69,6 @@ contract Burse {
         mode = Mode.Sale;
         if (tradingVolume != 0) {
             Token(tokenACDM).mint(address(this), tradingVolume / tokenPrice);
-            tradingVolume = 0;
         }
     }
 
@@ -81,15 +84,17 @@ contract Burse {
         timestampStartRound = block.timestamp;
         mode = Mode.Trade;
         tokenPrice = (tokenPrice * 1030000 + 4) / 1000000;
+        console.log(tradingVolume);
         if (tradingVolume != 0) {
             Token(tokenACDM).burn(
                 address(this),
                 Token(tokenACDM).balanceOf(address(this))
             );
+            tradingVolume = 0;
         }
     }
 
-    function buyAcdm() public payable {
+    function buyAcdm() public payable nonReentrant {
         require(mode == Mode.Sale, "Wait for the sale mode to come");
         require(
             block.timestamp < roundDuration + timestampStartRound,
@@ -111,11 +116,7 @@ contract Burse {
                 );
             }
         }
-        IERC20(tokenACDM).safeTransferFrom(
-            address(this),
-            msg.sender,
-            msg.value / tokenPrice
-        );
+        IERC20(tokenACDM).safeTransfer(msg.sender, msg.value / tokenPrice);
     }
 
     function addOrder(uint256 _amount, uint256 _price)
@@ -138,7 +139,7 @@ contract Burse {
         orders[_id].amount = 0;
     }
 
-    function redeemOrder(uint256 _id) public payable {
+    function redeemOrder(uint256 _id) public payable nonReentrant {
         require(mode == Mode.Trade, "Wait for the Trade mode to come");
         require(msg.value > 0, "You sent 0 ETH");
         require(

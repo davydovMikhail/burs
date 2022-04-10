@@ -7,13 +7,9 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 contract Token is ERC20, Ownable {
     address private _burse;
 
-    constructor(
-        uint256 _supply,
-        string memory _name,
-        string memory _symbol
-    ) ERC20(_name, _symbol) {
-        _mint(msg.sender, _supply);
-    }
+    constructor(string memory _name, string memory _symbol)
+        ERC20(_name, _symbol)
+    {}
 
     modifier onlyBurse() {
         require(msg.sender == _burse, "Access is denied");
